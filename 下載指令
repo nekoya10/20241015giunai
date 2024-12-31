@@ -1,1 +1,3 @@
 pip install -r requirements.txt
+flask --app main run #網頁開啟
+flask --app main run --debug
