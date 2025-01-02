@@ -1,11 +1,17 @@
-from flask import Flask
-import os
-from dotenv import load_dotenv
+from flask import Flask, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import *
 import google.generativeai as genai
+from dotenv import load_dotenv
+import os
 
 app = Flask(__name__)
 genai.configure(api_key=os.environ['Gemini_API_KEY'])
 model = genai.GenerativeModel("gemini-1.5-flash")
+
+line_bot_api = LineBotApi(os.environ['CHANNEL_ACCESS_TOKEN'])
+handler = WebhookHandler(os.environ['CHANNEL_SECRET'])
 
 @app.route("/")
 @app.route("/<string:question>")
@@ -15,6 +21,19 @@ def index(question:str=""):
     html_format = html_format.replace("```html","").replace("```","")
     return html_format
 
-@app.route('/hello')
-def hello():
-    return 'Hello, MAM'
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    response = model.generate_content(event.message.text)
+    message = TextSendMessage(text=response.text)
+    line_bot_api.reply_message(event.reply_token, message)
